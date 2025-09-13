@@ -29,7 +29,7 @@ class AIPlayer(Player):
     #   cpy           - whether the player is a copy (when playing itself)
     ##
     def __init__(self, inputPlayerId):
-        super(AIPlayer,self).__init__(inputPlayerId, "Random")
+        super(AIPlayer,self).__init__(inputPlayerId, "HW2AGENT")
     
     ##
     #getPlacement
@@ -96,14 +96,22 @@ class AIPlayer(Player):
     ##
     def getMove(self, currentState):
         moves = listAllLegalMoves(currentState)
-        selectedMove = moves[random.randint(0,len(moves) - 1)];
-
-        #don't do a build move if there are already 3+ ants
-        numAnts = len(currentState.inventories[currentState.whoseTurn].ants)
-        while (selectedMove.moveType == BUILD and numAnts >= 3):
-            selectedMove = moves[random.randint(0,len(moves) - 1)];
-            
-        return selectedMove
+        moves_states = []
+        node_list = None
+        selected_move = None
+        for move in moves:
+            next_state = getNextState(currentState, move)
+            moves_states.append(next_state)
+        for states in moves_states:
+            node = {
+                "move": None,
+                "state": states,
+                "depth": 1,
+                "parent": None
+                "evalutation": None
+            }
+        selected_move = bestMove(states)
+        return selected_move
     
     ##
     #getAttack
@@ -126,3 +134,18 @@ class AIPlayer(Player):
     def registerWin(self, hasWon):
         #method templaste, not implemented
         pass
+
+
+    #HW 2 methods here
+    def utility(state):
+        return 1
+        pass
+
+    def bestMove(nodes): #find best move in a given list of nodes
+        best_utility = 0
+        best_move = None
+        for node in nodes:
+            if node[evaluation] > best_utility): #rank their utility and take the best
+                best_move = node[move]
+        return best_move
+
