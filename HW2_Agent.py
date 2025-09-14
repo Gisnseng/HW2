@@ -22,14 +22,30 @@ from AIPlayerUtils import *
 
 #HW 2 methods here
 def utility(state): #to be done later along with the unit tests
-    return 1
+    # Consider the Queen's health
+    # Consider the amount of food
+    # Consider the amount of ants on the board
+    # Normalize the value after adding everything up?
+
+    inventory = getCurrPlayerInventory(state)
+    
+    queenHealth = inventory.getQueen().health
+    food = inventory.foodCount
+    numAnts = len(inventory.ants)
+
+    value = queenHealth + food + numAnts
+    max_value = 10 + 11 + 6     # Max Queen health + max food (before win) + arbitrary number of Ants on board
+    min_value = 0
+
+    # return the normalized value (between 0 and 1)
+    return (value - min_value) / (max_value - min_value)
 
 def bestMove(nodes): #find best move in a given list of nodes
     best_utility = 0
     best_move = None
 
     for node in nodes:
-        if (node.evaluation > best_utility): #rank their utility and take the best
+        if (node.evaluation > best_utility): # rank their utility and take the best
             best_utility = node.evaluation
             best_move = node.move
     return best_move
@@ -117,13 +133,15 @@ class AIPlayer(Player):
 
         for move in legal_moves:
             nextState = getNextState(currentState, move)
+            depth = 1   # depth stays 1 for HW A
 
             node = {
                 "move": move,
                 "state": nextState,
-                "depth": 1,
+                "depth": depth,
                 "parent": currentState,
-                "evaluation": utility(nextState)
+                "evaluation": utility(nextState) + depth
+                # evaluation is the sum of the utility and the depth
             }
             node_list.append(node)
 
