@@ -22,15 +22,16 @@ from AIPlayerUtils import *
 
 #HW 2 methods here
 def utility(state): #to be done later along with the unit tests
-        return 1
+    return 1
 
 def bestMove(nodes): #find best move in a given list of nodes
     best_utility = 0
     best_move = None
+
     for node in nodes:
         if (node.evaluation > best_utility): #rank their utility and take the best
-            best_move = node.move
             best_utility = node.evaluation
+            best_move = node.move
     return best_move
 
 class AIPlayer(Player):
@@ -108,16 +109,13 @@ class AIPlayer(Player):
     #   currentState - The state of the current game waiting for the player's move (GameState)
     #
     #Return: The Move to be made
-    ##
-            #HW 2 methods here
-
-    
+    ##    
 
     def getMove(self, currentState):
-        moves = listAllLegalMoves(currentState)
+        legal_moves = listAllLegalMoves(currentState)
         node_list = []
 
-        for move in moves:
+        for move in legal_moves:
             nextState = getNextState(currentState, move)
 
             node = {
