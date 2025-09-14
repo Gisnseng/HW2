@@ -19,6 +19,20 @@ from AIPlayerUtils import *
 #Variables:
 #   playerId - The id of the player.
 ##
+
+#HW 2 methods here
+def utility(state): #to be done later along with the unit tests
+        return 1
+
+def bestMove(nodes): #find best move in a given list of nodes
+    best_utility = 0
+    best_move = None
+    for node in nodes:
+        if (node["evaluation"] > best_utility): #rank their utility and take the best
+            best_move = node["move"]
+            best_utility = node["evaluation"]
+    return best_move
+
 class AIPlayer(Player):
 
     #__init__
@@ -28,6 +42,7 @@ class AIPlayer(Player):
     #   inputPlayerId - The id to give the new player (int)
     #   cpy           - whether the player is a copy (when playing itself)
     ##
+
     def __init__(self, inputPlayerId):
         super(AIPlayer,self).__init__(inputPlayerId, "HW2AGENT")
     
@@ -94,23 +109,24 @@ class AIPlayer(Player):
     #
     #Return: The Move to be made
     ##
+            #HW 2 methods here
+
+    
+
     def getMove(self, currentState):
         moves = listAllLegalMoves(currentState)
-        moves_states = []
-        node_list = None
+        node_list = []
         selected_move = None
         for move in moves:
-            next_state = getNextState(currentState, move)
-            moves_states.append(next_state)
-        for states in moves_states:
             node = {
-                "move": None,
-                "state": states,
+                "move": move,
+                "state": getNextState(currentState, move),
                 "depth": 1,
-                "parent": None
-                "evalutation": None
+                "parent": None,
+                "evaluation": utility(getNextState(currentState, move))
             }
-        selected_move = bestMove(states)
+            node_list.append(node)
+        selected_move = bestMove(node_list)
         return selected_move
     
     ##
@@ -134,18 +150,4 @@ class AIPlayer(Player):
     def registerWin(self, hasWon):
         #method templaste, not implemented
         pass
-
-
-    #HW 2 methods here
-    def utility(state):
-        return 1
-        pass
-
-    def bestMove(nodes): #find best move in a given list of nodes
-        best_utility = 0
-        best_move = None
-        for node in nodes:
-            if node[evaluation] > best_utility): #rank their utility and take the best
-                best_move = node[move]
-        return best_move
 
