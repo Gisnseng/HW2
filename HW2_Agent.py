@@ -84,35 +84,7 @@ class AIPlayer(Player):
             return moves
         else:
             return [(0, 0)]
-    
-    ##
-    #getMove
-    #Description: Gets the next move from the Player.
-    #
-    #Parameters:
-    #   currentState - The state of the current game waiting for the player's move (GameState)
-    #
-    #Return: The Move to be made
-    ##
-    def getMove(self, currentState):
-        moves = listAllLegalMoves(currentState)
-        moves_states = []
-        node_list = None
-        selected_move = None
-        for move in moves:
-            next_state = getNextState(currentState, move)
-            moves_states.append(next_state)
-        for states in moves_states:
-            node = {
-                "move": None,
-                "state": states,
-                "depth": 1,
-                "parent": None
-                "evalutation": None
-            }
-        selected_move = bestMove(states)
-        return selected_move
-    
+        
     ##
     #getAttack
     #Description: Gets the attack to be made from the Player
@@ -138,14 +110,45 @@ class AIPlayer(Player):
 
     #HW 2 methods here
     def utility(state):
+        # maybe figure out how close the queen is to dying and normalize it?
         return 1
-        pass
+    
+    ##
+    #getMove
+    #Description: Gets the next move from the Player.
+    #
+    #Parameters:
+    #   currentState - The state of the current game waiting for the player's move (GameState)
+    #
+    #Return: The Move to be made
+    ##
+    def getMove(self, currentState):
+        moves = listAllLegalMoves(currentState)
+        moves_and_states = []
+        node_list = []
 
-    def bestMove(nodes): #find best move in a given list of nodes
+        for move in moves:
+            nextState = getNextState(currentState, move)
+            moves_and_states.append(move, nextState)
+        for (move, nextState) in moves_and_states:
+            node = {
+                "move": move,
+                "state": nextState,
+                "depth": 1,
+                "parent": currentState,
+                "evaluation": utility(nextState)
+            }
+            node_list.append(node, nextState)
+
+        return bestMove(node_list)
+    
+    
+    def bestMove(node_list): #find best move in a given list of nodes
         best_utility = 0
         best_move = None
-        for node in nodes:
-            if node[evaluation] > best_utility): #rank their utility and take the best
-                best_move = node[move]
+        for (state, node) in node_list:
+            if node.evaluation > best_utility: #rank their utility and take the best
+                best_utility = node.evaluation
+                best_move = state
         return best_move
-
+    
