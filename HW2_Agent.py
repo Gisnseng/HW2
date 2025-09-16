@@ -21,84 +21,78 @@ from AIPlayerUtils import *
 ##
 
 #HW 2 methods here
-def manhattanDist(a, b):
-    """Return Manhattan distance between two coordinates a and b."""
-    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+def getDistance(antID, target, inventory):
+    for ant in inventory.ants:
+        if ant.UniqueID == antID:
+            antX, antY = ant.coords
+            break
+
+    targetX, targetY = target.coords
+    return abs(antX - targetX) + abs(antY - targetY)
 
 
-def utility(state):
-    me = state.whoseTurn
+def utility(parentState, nextState):
+    me = nextState.whoseTurn
     enemy = not me
 
-    myInv = getCurrPlayerInventory(state)
-    enemyInv = getEnemyInv(enemy, state)
+    parentInventory = getCurrPlayerInventory(parentState)
+    childInventory = getCurrPlayerInventory(nextState)
+    parentEnemyInventory = getEnemyInv(enemy, parentState)
+    childEnemyInventory = getEnemyInv(enemy, nextState)
 
-    myQueen = myInv.getQueen()
-    enemyQueen = enemyInv.getQueen()
-    if enemyQueen is None or enemyQueen.health <= 0:
+    childEnemyQueen = childEnemyInventory.getQueen()
+    parentEnemyQueen = parentEnemyInventory.getQueen()
+
+    if childEnemyQueen is None or childEnemyQueen.health <= 0:
         return 1.0  # instant win
 
-    # --- Tunnel and food ---
-    tunnel = getConstrList(state, me, (TUNNEL,))[0]
-    foods = getConstrList(state, None, (FOOD,))
-
-    # Find closest food to tunnel
-    closestFood = None
-    bestDist = 9999
-    for food in foods:
-        dist = manhattanDist(food.coords, tunnel.coords)
-        if dist < bestDist:
-            closestFood = food
-            bestDist = dist
+    tunnel = getConstrList(parentState, me, (TUNNEL,))[0]
+    food = getConstrList(parentState, None, (FOOD,))[0]
 
     # --- Workers ---
-    workers = getAntList(state, me, (WORKER,))
-    carryingWorkers = [w for w in workers if w.carrying]
-    nonCarryingWorkers = [w for w in workers if not w.carrying]
+    workerBonus = 0.0
+    workers = getAntList(parentState, me, (WORKER,))
+    for worker in workers:
+        if worker.carrying:
+            parentDistance = getDistance(worker.UniqueID, tunnel, parentInventory)
+            nextDistance = getDistance(worker.UniqueID, tunnel, childInventory)
+        else:
+            parentDistance = getDistance(worker.UniqueID, food, parentInventory)
+            nextDistance = getDistance(worker.UniqueID, food, childInventory)
 
-    # Reward carrying workers moving toward tunnel
-    carryingScore = 0.0
-    if carryingWorkers:
-        avgDist = sum(manhattanDist(w.coords, tunnel.coords) for w in carryingWorkers) / len(carryingWorkers)
-        carryingScore = max(0, 10 - avgDist) / 10.0
-
-    # Reward non-carrying workers moving toward closest food
-    seekFoodScore = 0.0
-    if nonCarryingWorkers and closestFood:
-        avgDist = sum(manhattanDist(w.coords, closestFood.coords) for w in nonCarryingWorkers) / len(nonCarryingWorkers)
-        seekFoodScore = max(0, 10 - avgDist) / 10.0
+        improvement = parentDistance - nextDistance
+        if improvement > 0:
+            workerBonus += improvement
 
     # --- Offensive ants ---
-    drones = getAntList(state, me, (DRONE,))
-    soldiers = getAntList(state, me, (SOLDIER,))
-    offensive = drones + soldiers
-    offenseScore = 0.0
-    if offensive:
-        avgDist = sum(manhattanDist(a.coords, enemyQueen.coords) for a in offensive) / len(offensive)
-        offenseScore = max(0, 10 - avgDist) / 10.0
+    offensiveBonus = 0.0
+    offensiveAnts = getAntList(parentState, me, (SOLDIER,))
+    if parentEnemyQueen and childEnemyQueen:
+        for ant in offensiveAnts:
+            parentDistance = getDistance(ant.UniqueID, parentEnemyQueen, parentInventory)
+            nextDistance = getDistance(ant.UniqueID, childEnemyQueen, childInventory)
 
-    # --- Queen danger ---
-    enemyDrones = getAntList(state, enemy, (DRONE,))
-    enemySoldiers = getAntList(state, enemy, (SOLDIER,))
-    enemyOffensive = enemyDrones + enemySoldiers
-    queenPenalty = 0.0
-    if myQueen and enemyOffensive:
-        avgDist = sum(manhattanDist(myQueen.coords, a.coords) for a in enemyOffensive) / len(enemyOffensive)
-        queenPenalty = max(0, 10 - avgDist) / 10.0  # closer to danger → higher penalty
+            improvement = parentDistance - nextDistance
+            if improvement > 0:
+                offensiveBonus += improvement
 
-    # --- Ant count bonus ---
-    allMyAnts = getAntList(state, me, (WORKER, DRONE, SOLDIER, QUEEN))
-    antCountScore = min(1.0, len(allMyAnts) / 10.0)  # normalize, max at 10 ants
+    # --- Food bonus ---
+    foodCount = childInventory.foodCount
+    foodBonus = foodCount / 11.0  # more food = more bonus
 
-    # --- Combine with weights ---
+    # --- NEW: Ant count bonus ---
+    totalAnts = len(getAntList(nextState, me, (SOLDIER,)))
+    antCountBonus = totalAnts / 10.0  # normalize; adjust 20 if max ants differs
+
+    # Combine
     value = (
-        carryingScore * 0.5 +
-        seekFoodScore * 0.8 +
-        offenseScore * 0.25 +
-        (1 - queenPenalty) * 0.15 +
-        antCountScore * 0.2
+        workerBonus * 0.01 +
+        offensiveBonus * 0.5 +
+        foodBonus * 0.02 +
+        antCountBonus * 0.4  # <-- weight this fairly high to encourage building
     )
 
+    print(f"VALUE {value}")
     return min(1.0, max(0.0, value))
 
 
@@ -109,7 +103,7 @@ def bestMove(nodes): #find best move in a given list of nodes
     for node in nodes:
         utility = node["evaluation"]
         move = node["move"]
-        print(f"UTILITY: {utility}")
+        #print(f"UTILITY: {utility}")
         print(f"CORRESPONDING MOVE: {move}")
 
         if (utility > best_utility): # rank their utility and take the best
@@ -209,7 +203,7 @@ class AIPlayer(Player):
                 "state": nextState,
                 "depth": depth,
                 "parent": currentState,
-                "evaluation": utility(nextState) + depth
+                "evaluation": utility(currentState, nextState) + depth
                 # evaluation is the sum of the utility and the depth
             }
             node_list.append(node)
