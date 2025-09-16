@@ -21,33 +21,102 @@ from AIPlayerUtils import *
 ##
 
 #HW 2 methods here
-def utility(state): #to be done later along with the unit tests
-    # Consider the Queen's health
-    # Consider the amount of food
-    # Consider the amount of ants on the board
-    # Normalize the value after adding everything up?
+def manhattanDist(a, b):
+    """Return Manhattan distance between two coordinates a and b."""
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
-    inventory = getCurrPlayerInventory(state)
-    
-    queenHealth = inventory.getQueen().health
-    food = inventory.foodCount
-    numAnts = len(inventory.ants)
 
-    value = queenHealth + food + numAnts
-    max_value = 10 + 11 + 6     # Max Queen health + max food (before win) + arbitrary number of Ants on board
-    min_value = 0
+def utility(state):
+    me = state.whoseTurn
+    enemy = not me
 
-    # return the normalized value (between 0 and 1)
-    return (value - min_value) / (max_value - min_value)
+    myInv = getCurrPlayerInventory(state)
+    enemyInv = getEnemyInv(enemy, state)
+
+    myQueen = myInv.getQueen()
+    enemyQueen = enemyInv.getQueen()
+    if enemyQueen is None or enemyQueen.health <= 0:
+        return 1.0  # instant win
+
+    # --- Tunnel and food ---
+    tunnel = getConstrList(state, me, (TUNNEL,))[0]
+    foods = getConstrList(state, None, (FOOD,))
+
+    # Find closest food to tunnel
+    closestFood = None
+    bestDist = 9999
+    for food in foods:
+        dist = manhattanDist(food.coords, tunnel.coords)
+        if dist < bestDist:
+            closestFood = food
+            bestDist = dist
+
+    # --- Workers ---
+    workers = getAntList(state, me, (WORKER,))
+    carryingWorkers = [w for w in workers if w.carrying]
+    nonCarryingWorkers = [w for w in workers if not w.carrying]
+
+    # Reward carrying workers moving toward tunnel
+    carryingScore = 0.0
+    if carryingWorkers:
+        avgDist = sum(manhattanDist(w.coords, tunnel.coords) for w in carryingWorkers) / len(carryingWorkers)
+        carryingScore = max(0, 10 - avgDist) / 10.0
+
+    # Reward non-carrying workers moving toward closest food
+    seekFoodScore = 0.0
+    if nonCarryingWorkers and closestFood:
+        avgDist = sum(manhattanDist(w.coords, closestFood.coords) for w in nonCarryingWorkers) / len(nonCarryingWorkers)
+        seekFoodScore = max(0, 10 - avgDist) / 10.0
+
+    # --- Offensive ants ---
+    drones = getAntList(state, me, (DRONE,))
+    soldiers = getAntList(state, me, (SOLDIER,))
+    offensive = drones + soldiers
+    offenseScore = 0.0
+    if offensive:
+        avgDist = sum(manhattanDist(a.coords, enemyQueen.coords) for a in offensive) / len(offensive)
+        offenseScore = max(0, 10 - avgDist) / 10.0
+
+    # --- Queen danger ---
+    enemyDrones = getAntList(state, enemy, (DRONE,))
+    enemySoldiers = getAntList(state, enemy, (SOLDIER,))
+    enemyOffensive = enemyDrones + enemySoldiers
+    queenPenalty = 0.0
+    if myQueen and enemyOffensive:
+        avgDist = sum(manhattanDist(myQueen.coords, a.coords) for a in enemyOffensive) / len(enemyOffensive)
+        queenPenalty = max(0, 10 - avgDist) / 10.0  # closer to danger → higher penalty
+
+    # --- Ant count bonus ---
+    allMyAnts = getAntList(state, me, (WORKER, DRONE, SOLDIER, QUEEN))
+    antCountScore = min(1.0, len(allMyAnts) / 10.0)  # normalize, max at 10 ants
+
+    # --- Combine with weights ---
+    value = (
+        carryingScore * 0.5 +
+        seekFoodScore * 0.8 +
+        offenseScore * 0.25 +
+        (1 - queenPenalty) * 0.15 +
+        antCountScore * 0.2
+    )
+
+    return min(1.0, max(0.0, value))
+
 
 def bestMove(nodes): #find best move in a given list of nodes
     best_utility = 0
     best_move = None
 
     for node in nodes:
-        if (node.evaluation > best_utility): # rank their utility and take the best
-            best_utility = node.evaluation
-            best_move = node.move
+        utility = node["evaluation"]
+        move = node["move"]
+        print(f"UTILITY: {utility}")
+        print(f"CORRESPONDING MOVE: {move}")
+
+        if (utility > best_utility): # rank their utility and take the best
+            best_utility = utility
+            best_move = move
+
+    print(f"BEST MOVE: {best_move}")
     return best_move
 
 class AIPlayer(Player):
