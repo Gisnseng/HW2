@@ -20,36 +20,49 @@ from AIPlayerUtils import *
 #   playerId - The id of the player.
 ##
 
-#HW 2 methods here
+# Determines the distance between selected Ant and its target
 def getDistance(antID, target, inventory):
+    # Ants are originally searched from the parentState, so their
+    #   corresponding Ant in the childState is matched via the Ant.UniqueID
     for ant in inventory.ants:
         if ant.UniqueID == antID:
             antX, antY = ant.coords
             break
 
+    # Returns a distance between the Ant and the Target's coordinates
     targetX, targetY = target.coords
     return abs(antX - targetX) + abs(antY - targetY)
 
+# Determines the best course of action (most successful Move)
+def utility(parentState, childState):
+    me = childState.whoseTurn
 
-def utility(parentState, nextState):
-    me = nextState.whoseTurn
-    enemy = not me
-
+    # My inventories and enemy inventory for comparisons
+    #       (this drives the utility function)
     parentInventory = getCurrPlayerInventory(parentState)
-    childInventory = getCurrPlayerInventory(nextState)
-    parentEnemyInventory = getEnemyInv(enemy, parentState)
-    childEnemyInventory = getEnemyInv(enemy, nextState)
+    childInventory = getCurrPlayerInventory(childState)
+    
+    enemyInventory = getEnemyInv(not me, childState)
+    enemyQueen = enemyInventory.getQueen()
 
-    childEnemyQueen = childEnemyInventory.getQueen()
-    parentEnemyQueen = parentEnemyInventory.getQueen()
+    # If the enemy Queen will die, take the move (highest utility)
+    if enemyQueen is None or enemyQueen.health <= 0:
+        return 1.0
 
-    if childEnemyQueen is None or childEnemyQueen.health <= 0:
-        return 1.0  # instant win
+    ################
+    ###  Functionality for targeting:
+    ###     Each Ant in the list is evaluated for its distance to the target
+    ###     in both the parentState and the childState (allows for comparison)
+    ###
+    ###     If the childState has a shorter distance than the parent, this move
+    ###     is encouraged by getting a higher utility (moves ants toward target)
+    ################
 
+    # Targets for the Worker ants (so they will collect food)
     tunnel = getConstrList(parentState, me, (TUNNEL,))[0]
     food = getConstrList(parentState, None, (FOOD,))[0]
 
-    # --- Workers ---
+    # Workers target the tunnels and the food sources (collecting)
     workerBonus = 0.0
     workers = getAntList(parentState, me, (WORKER,))
     for worker in workers:
@@ -64,36 +77,47 @@ def utility(parentState, nextState):
         if improvement > 0:
             workerBonus += improvement
 
-    # --- Offensive ants ---
+    # Attacker Ants attack the enemy Workers first, then the enemy Queen
     offensiveBonus = 0.0
-    offensiveAnts = getAntList(parentState, me, (SOLDIER,))
-    if parentEnemyQueen and childEnemyQueen:
-        for ant in offensiveAnts:
-            parentDistance = getDistance(ant.UniqueID, parentEnemyQueen, parentInventory)
-            nextDistance = getDistance(ant.UniqueID, childEnemyQueen, childInventory)
+    offensiveAnts = getAntList(parentState, me, (DRONE, SOLDIER, R_SOLDIER))
+    enemyWorkers = getAntList(parentState, not me, (WORKER,))
 
-            improvement = parentDistance - nextDistance
-            if improvement > 0:
-                offensiveBonus += improvement
+    # Picks a target in the enemyWorkers list (or the Queen if no Workers)
+    if enemyWorkers:
+        target = enemyWorkers[0]
+    else:
+        target = enemyQueen
 
-    # --- Food bonus ---
-    foodCount = childInventory.foodCount
-    foodBonus = foodCount / 11.0  # more food = more bonus
+    for ant in offensiveAnts:
+        parentDistance = getDistance(ant.UniqueID, target, parentInventory)
+        nextDistance = getDistance(ant.UniqueID, target, childInventory)
+        
+        improvement = parentDistance - nextDistance
+        if improvement > 0:
+            offensiveBonus += improvement
 
-    # --- NEW: Ant count bonus ---
-    totalAnts = len(getAntList(nextState, me, (SOLDIER,)))
-    antCountBonus = totalAnts / 10.0  # normalize; adjust 20 if max ants differs
+    # Reward for increasing the food count
+    foodBonus = childInventory.foodCount * 0.1
 
-    # Combine
+    # Reward for building Soldiers
+    numSoldiers = len(getAntList(childState, me, (SOLDIER,)))
+    soldierNumBonus = numSoldiers * 0.2
+
+    # Reward for having exactly 2 Workers at all times (if possible)
+    numWorkers = len(getAntList(childState, me, (WORKER,)))
+    workerNumBonus = max(0, 1 - abs(numWorkers - 2) * 0.5)
+
+    # Calculate combined utility (these values are somewhat arbitrary)
     value = (
-        workerBonus * 0.01 +
-        offensiveBonus * 0.5 +
+        workerBonus * 0.02 +
+        offensiveBonus * 0.8 +
         foodBonus * 0.02 +
-        antCountBonus * 0.4  # <-- weight this fairly high to encourage building
+        soldierNumBonus * 0.06 +
+        workerNumBonus * 0.04
     )
 
-    print(f"VALUE {value}")
-    return min(1.0, max(0.0, value))
+    # Always return a maximum of 1.0
+    return min(1.0, value)
 
 
 def bestMove(nodes): #find best move in a given list of nodes
@@ -104,13 +128,13 @@ def bestMove(nodes): #find best move in a given list of nodes
         utility = node["evaluation"]
         move = node["move"]
         #print(f"UTILITY: {utility}")
-        print(f"CORRESPONDING MOVE: {move}")
+        #print(f"CORRESPONDING MOVE: {move}")
 
         if (utility > best_utility): # rank their utility and take the best
             best_utility = utility
             best_move = move
 
-    print(f"BEST MOVE: {best_move}")
+    #print(f"BEST MOVE: {best_move}")
     return best_move
 
 class AIPlayer(Player):
