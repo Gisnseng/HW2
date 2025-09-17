@@ -128,14 +128,11 @@ def bestMove(nodes): #find best move in a given list of nodes
     for node in nodes:
         utility = node["evaluation"]
         move = node["move"]
-        #print(f"UTILITY: {utility}")
-        #print(f"CORRESPONDING MOVE: {move}")
 
         if (utility > best_utility): # rank their utility and take the best
             best_utility = utility
             best_move = move
 
-    #print(f"BEST MOVE: {best_move}")
     return best_move
 
 class AIPlayer(Player):
@@ -149,7 +146,7 @@ class AIPlayer(Player):
     ##
 
     def __init__(self, inputPlayerId):
-        super(AIPlayer,self).__init__(inputPlayerId, "HW2AGENT")
+        super(AIPlayer,self).__init__(inputPlayerId, "Quince_and_Indiana")
     
     ##
     #getPlacement
