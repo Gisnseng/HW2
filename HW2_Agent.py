@@ -21,120 +21,108 @@ from AIPlayerUtils import *
 ##
 
 # Determines the distance between selected Ant and its target
-def getDistance(antID, target, inventory):
-    # Ants are originally searched from the parentState, so their
-    #   corresponding Ant in the childState is matched via the Ant.UniqueID
-    for ant in inventory.ants:
-        if ant.UniqueID == antID:
-            antX, antY = ant.coords
-            break
+def getDistance(a, b):
 
-    # Returns a distance between the Ant and the Target's coordinates
-    targetX, targetY = target.coords
-    return abs(antX - targetX) + abs(antY - targetY)
+    # Returns a distance between point A and point B's coordinates
+    a_X, a_Y = a.coords
+    b_X, b_Y = b.coords
+
+    return abs(a_X - b_X) + abs(a_Y - b_Y)
 
 # Determines the best course of action (most successful Move)
-def utility(parentState, childState):
-    me = childState.whoseTurn
+def utility(state):
+    me = state.whoseTurn
+    enemyQueen = getEnemyInv(not me, state).getQueen()
 
-    # My inventories and enemy inventory for comparisons
-    #       (this drives the utility function)
-    parentInventory = getCurrPlayerInventory(parentState)
-    childInventory = getCurrPlayerInventory(childState)
-    
-    enemyInventory = getEnemyInv(not me, childState)
-    enemyQueen = enemyInventory.getQueen()
-
-    # If the enemy Queen will die, take the move (highest utility)
+    # If the enemy Queen will die, take the move (lowest utility)
     if enemyQueen is None or enemyQueen.health <= 0:
-        return 1.0
+        return 0.0
 
     ################
     ###  Functionality for targeting:
-    ###     Each Ant in the list is evaluated for its distance to the target
-    ###     in both the parentState and the childState (allows for comparison)
+    ###     Should find estimated number of moves for each ant to get to 
+    ###     their goal (Workers moving food to tunnel, for example)
     ###
-    ###     If the childState has a shorter distance than the parent, this move
-    ###     is encouraged by getting a higher utility (moves ants toward target)
+    ###  Current Issue:
+    ###     The Workers oscillate between two tiles next to a tunnel, never
+    ###     actually going to it. It seems that the state passed to the utility()
+    ###     never actually contains an ant that could move there... not sure why.
     ################
 
     # Targets for the Worker ants (so they will collect food)
-    tunnel = getConstrList(parentState, me, (TUNNEL,))[0]
-    food = getConstrList(parentState, None, (FOOD,))[0]
+    tunnel = getConstrList(state, me, (TUNNEL,))[0]
+    if (len(getConstrList(state, None, (FOOD,))) > 0):
+        food = getConstrList(state, None, (FOOD,))[0]
 
     # Workers target the tunnels and the food sources (collecting)
-    workerBonus = 0.0
-    workers = getAntList(parentState, me, (WORKER,))
+    workers = getAntList(state, me, (WORKER,))
+    worker_speed = 2.0
+    moves_to_worker_goal = 0.0
+
+    food_collected = getCurrPlayerInventory(state).foodCount
+    food_needed = 11
+
     for worker in workers:
         if worker.carrying:
-            parentDistance = getDistance(worker.UniqueID, tunnel, parentInventory)
-            nextDistance = getDistance(worker.UniqueID, tunnel, childInventory)
-        else:
-            parentDistance = getDistance(worker.UniqueID, food, parentInventory)
-            nextDistance = getDistance(worker.UniqueID, food, childInventory)
+            # distance to tunnel only
+            total_distance = getDistance(worker, tunnel)
+            print(f"WORKER COORDS: {worker.coords}")
 
-        improvement = parentDistance - nextDistance
-        if improvement > 0:
-            workerBonus += improvement
+            # Issue here: it seems that the coords to move to the tunnel are never even passed to utility
+        else:
+            # distance to food + distance from food to tunnel
+            total_distance = getDistance(worker, food) + getDistance(food, tunnel)
+
+        moves_for_this_worker = total_distance / worker_speed
+
+        moves_to_worker_goal = max(moves_to_worker_goal, moves_for_this_worker)
 
     # Attacker Ants attack the enemy Workers first, then the enemy Queen
-    offensiveBonus = 0.0
-    offensiveAnts = getAntList(parentState, me, (DRONE, SOLDIER, R_SOLDIER))
-    enemyWorkers = getAntList(parentState, not me, (WORKER,))
+    soldiers = getAntList(state, me, (SOLDIER,))
+    enemyWorkers = getAntList(state, not me, (WORKER,))
 
     # Picks a target in the enemyWorkers list (or the Queen if no Workers)
-    if enemyWorkers:
-        target = enemyWorkers[0]
-    else:
-        target = enemyQueen
+    moves_to_soldier_goal = 10
+    for soldier in soldiers:
+        if enemyWorkers[0]:
+            workerDistance = getDistance(soldier, enemyWorkers[0])
+            queenDistance = getDistance(enemyWorkers[0], enemyQueen)
+        else:
+            workerDistance = 0.0
+            queenDistance = getDistance(soldier, enemyQueen)
 
-    for ant in offensiveAnts:
-        parentDistance = getDistance(ant.UniqueID, target, parentInventory)
-        nextDistance = getDistance(ant.UniqueID, target, childInventory)
-        
-        improvement = parentDistance - nextDistance
-        if improvement > 0:
-            offensiveBonus += improvement
+        soldier_speed = 2.0
+        soldier_attack = 4.0
 
-    # Reward for increasing the food count
-    foodBonus = childInventory.foodCount * 0.1
+        moves_to_worker = workerDistance / soldier_speed
+        to_kill_worker = enemyWorkers[0].health / soldier_attack
+        moves_to_queen = queenDistance / soldier_speed
+        to_kill_queen = enemyQueen.health / soldier_attack
 
-    # Reward for building Soldiers
-    numSoldiers = len(getAntList(childState, me, (SOLDIER,)))
-    soldierNumBonus = numSoldiers * 0.2
+        moves_to_soldier_goal += (moves_to_worker + to_kill_worker + moves_to_queen + to_kill_queen) / len(soldiers)
 
-    # Reward for having exactly 2 Workers at all times (if possible)
-    numWorkers = len(getAntList(childState, me, (WORKER,)))
-    workerNumBonus = max(0, 1 - abs(numWorkers - 2) * 0.5)
+    total_moves_needed = moves_to_worker_goal + moves_to_soldier_goal
 
-    # Calculate combined utility (these values are somewhat arbitrary)
-    value = (
-        workerBonus * 0.02 +
-        offensiveBonus * 0.8 +
-        foodBonus * 0.02 +
-        soldierNumBonus * 0.06 +
-        workerNumBonus * 0.04
-    )
+    # reduce total moves proportionally by food already collected
+    food_progress_factor = food_collected / food_needed
+    total_moves_needed *= (1.0 - food_progress_factor)
 
-    # Always return a maximum of 1.0
-    return min(1.0, value)
+    # print(f"TOTAL: {total_moves_needed}")
+    return total_moves_needed
 
 
 def bestMove(nodes): #find best move in a given list of nodes
-    best_utility = 0
+    least_utility = 100
     best_move = None
 
     for node in nodes:
         utility = node["evaluation"]
         move = node["move"]
-        #print(f"UTILITY: {utility}")
-        #print(f"CORRESPONDING MOVE: {move}")
 
-        if (utility > best_utility): # rank their utility and take the best
-            best_utility = utility
+        if (utility < least_utility): # rank their utility and take the best
+            least_utility = utility
             best_move = move
 
-    #print(f"BEST MOVE: {best_move}")
     return best_move
 
 class AIPlayer(Player):
@@ -148,7 +136,7 @@ class AIPlayer(Player):
     ##
 
     def __init__(self, inputPlayerId):
-        super(AIPlayer,self).__init__(inputPlayerId, "HW2AGENT")
+        super(AIPlayer,self).__init__(inputPlayerId, "Quince_and_Indiana")
     
     ##
     #getPlacement
@@ -227,7 +215,7 @@ class AIPlayer(Player):
                 "state": nextState,
                 "depth": depth,
                 "parent": currentState,
-                "evaluation": utility(currentState, nextState) + depth
+                "evaluation": utility(nextState) + depth
                 # evaluation is the sum of the utility and the depth
             }
             node_list.append(node)
@@ -257,3 +245,31 @@ class AIPlayer(Player):
         #method templaste, not implemented
         pass
 
+# Unit tests
+
+# utility
+blank_state = GameState.getBasicState()
+blank_state_next = getNextState(blank_state, listAllLegalMoves(blank_state)[0])
+print(utility(blank_state_next))
+#This returns zero because the test state doesn't have any food
+
+# bestMove
+legal_moves = listAllLegalMoves(blank_state)
+node_list = []
+
+for move in legal_moves:
+    nextState = getNextState(blank_state, move)
+    depth = 1   
+
+    node = {
+        "move": move,
+        "state": nextState,
+        "depth": depth,
+        "parent": blank_state,
+        "evaluation": utility(nextState) + depth
+        
+    }
+    node_list.append(node)
+print(bestMove(node_list))
+# This prints the move action that moves the ant at 0,0 to 1,0
+# getMove is omitted because it does the exact same thing we did to test bestMove
